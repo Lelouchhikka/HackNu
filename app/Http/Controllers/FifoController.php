@@ -7,11 +7,12 @@ use App\Models\Supply;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use SplQueue;
+
 class FifoController extends Controller
 {
     public function calculateProfit(Request $request)
     {
-
         // Валидация входных данных
         $validatedData = $request->validate([
             'fromTime' => 'required|date_format:Y-m-d H:i:s',
@@ -37,45 +38,35 @@ class FifoController extends Controller
         $profit = 0;
         $quantitySold = 0;
 
-        // Используем указатель для обхода записей из таблицы supplies
-        $supplyIndex = 0;
-        $supplyCount = $supplyItems->count();
+        // Создаем очередь из записей поставок
+        $supplyQueue = new SplQueue();
+        foreach ($supplyItems as $supply) {
+            $supplyQueue->enqueue($supply);
+        }
 
-        // Проходимся по записям из таблицы sales
+        // Проходимся по записям из таблицы продаж
         foreach ($saleItems as $sale) {
             $quantitySold += $sale->quantity;
             $revenue += $sale->quantity * $sale->price;
 
-            // Используем бинарный поиск, чтобы найти подходящую запись из таблицы supplies
-            $left = $supplyIndex;
-            $right = $supplyCount - 1;
-            $match = null;
-            while ($left <= $right) {
-                $mid = ($left + $right) >> 1;
-                if ($supplyItems[$mid]->time < $sale->time) {
-                    $left = $mid + 1;
-                } else {
-                    $match = $mid;
-                    $right = $mid - 1;
-                }
+            // Извлекаем из очереди поставок первую запись, удовлетворяющую условиям
+            while (!$supplyQueue->isEmpty() && $supplyQueue->bottom()->time < $sale->time) {
+                $supplyQueue->dequeue();
             }
 
-            // Обрабатываем каждую запись из таблицы supplies, пока не будет удовлетворено всё количество продаж
-            while ($sale->quantity > 0 && $match !== null && $match < $supplyCount) {
-                $supply = $supplyItems[$match];
+            // Обрабатываем каждую запись из очереди, пока не будет удовлетворено всё количество продаж
+            while ($sale->quantity > 0 && !$supplyQueue->isEmpty()) {
+                $supply = $supplyQueue->bottom();
                 $quantitySupplied = min($sale->quantity, $supply->quantity);
                 $cost += $quantitySupplied * $supply->price;
                 $sale->quantity -= $quantitySupplied;
                 $supply->quantity -= $quantitySupplied;
 
-                // Если поставка закончилась, то переходим к следующей
+                // Если поставка закончилась, то извлекаем ее из очереди
                 if ($supply->quantity <= 0) {
-                    $match++;
+                    $supplyQueue->dequeue();
                 }
             }
-
-            // Обновляем указатель на последнюю обработанную запись из таблицы supplies
-            $supplyIndex = $match ?? $supplyIndex;
         }
 
         // Вычисляем чистую прибыль
@@ -91,3 +82,4 @@ class FifoController extends Controller
     }
 
 }
+

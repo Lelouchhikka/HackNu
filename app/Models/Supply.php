@@ -9,6 +9,7 @@ class Supply extends Model
 {
     public $timestamps = false;
     use HasFactory;
+    protected $table = 'supply';
     protected $fillable = [
         'barcode',
         'quantity',

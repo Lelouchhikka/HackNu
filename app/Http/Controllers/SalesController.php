@@ -33,6 +33,7 @@ class SalesController extends Controller
             'time'=>'required|date_format:Y-m-d H:i:s'
         ]);
         $sale=Sale::create($validatedData);
+
         return response()->json(['success' => 'success'], 200);
     }
 

@@ -4,52 +4,66 @@ namespace App\Http\Controllers;
 
 use App\Models\Sale;
 use App\Models\Supply;
+use Barryvdh\Debugbar\Facades\Debugbar;
 use Illuminate\Http\Request;
-
+use Illuminate\Support\Facades\DB;
 class FifoController extends Controller
 {
     public function calculateProfit(Request $request)
     {
+        // Валидация входных данных
         $validatedData = $request->validate([
             'fromTime' => 'required|date_format:Y-m-d H:i:s',
             'toTime' => 'required|date_format:Y-m-d H:i:s',
             'barcode' => 'required|integer',
         ]);
 
+        // Используем Eloquent для получения всех записей из таблицы supplies, которые соответствуют условиям запроса
         $supplyItems = Supply::where('barcode', $validatedData['barcode'])
             ->whereBetween('time', [$validatedData['fromTime'], $validatedData['toTime']])
             ->orderBy('time', 'ASC')
             ->get();
 
+        // Используем Eloquent для получения всех записей из таблицы sales, которые соответствуют условиям запроса
         $saleItems = Sale::where('barcode', $validatedData['barcode'])
             ->whereBetween('time', [$validatedData['fromTime'], $validatedData['toTime']])
             ->orderBy('time', 'ASC')
             ->get();
 
+        // Инициализируем переменные
         $cost = 0;
         $revenue = 0;
         $profit = 0;
         $quantitySold = 0;
 
+        // Используем указатель для обхода записей из таблицы supplies
+        $supplyIndex = 0;
+        $supplyCount = $supplyItems->count();
+
+        // Проходимся по записям из таблицы sales
         foreach ($saleItems as $sale) {
             $quantitySold += $sale->quantity;
             $revenue += $sale->quantity * $sale->price;
 
-            while ($sale->quantity > 0 && count($supplyItems) > 0) {
-                $supply = $supplyItems->shift();
+            // Обрабатываем каждую запись из таблицы supplies, пока не будет удовлетворено всё количество продаж
+            while ($sale->quantity > 0 && $supplyIndex < $supplyCount) {
+                $supply = $supplyItems[$supplyIndex];
                 $quantitySupplied = min($sale->quantity, $supply->quantity);
                 $cost += $quantitySupplied * $supply->price;
                 $sale->quantity -= $quantitySupplied;
                 $supply->quantity -= $quantitySupplied;
 
-                if ($supply->quantity > 0) {
-                    $supplyItems->prepend($supply);
+                // Если поставка закончилась, то переходим к следующей
+                if ($supply->quantity <= 0) {
+                    $supplyIndex++;
                 }
             }
         }
 
+        // Вычисляем чистую прибыль
         $profit = $revenue - $cost;
 
+        // Возвращаем ответ в виде JSON
         return response()->json([
             'barcode' => $validatedData['barcode'],
             'quantity' => $quantitySold,
@@ -57,4 +71,5 @@ class FifoController extends Controller
             'netProfit' => $profit,
         ]);
     }
+
 }

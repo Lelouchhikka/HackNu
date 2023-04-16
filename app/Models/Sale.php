@@ -9,7 +9,9 @@ class Sale extends Model
 {
     public $timestamps = false;
     use HasFactory;
-     protected $fillable = [
+    protected $table = 'sale';
+
+    protected $fillable = [
     'barcode',
     'quantity',
     'price',

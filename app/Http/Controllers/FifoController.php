@@ -4,13 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Sale;
 use App\Models\Supply;
-use Barryvdh\Debugbar\Facades\Debugbar;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 class FifoController extends Controller
 {
     public function calculateProfit(Request $request)
     {
+
         // Валидация входных данных
         $validatedData = $request->validate([
             'fromTime' => 'required|date_format:Y-m-d H:i:s',
@@ -45,9 +46,23 @@ class FifoController extends Controller
             $quantitySold += $sale->quantity;
             $revenue += $sale->quantity * $sale->price;
 
+            // Используем бинарный поиск, чтобы найти подходящую запись из таблицы supplies
+            $left = $supplyIndex;
+            $right = $supplyCount - 1;
+            $match = null;
+            while ($left <= $right) {
+                $mid = ($left + $right) >> 1;
+                if ($supplyItems[$mid]->time < $sale->time) {
+                    $left = $mid + 1;
+                } else {
+                    $match = $mid;
+                    $right = $mid - 1;
+                }
+            }
+
             // Обрабатываем каждую запись из таблицы supplies, пока не будет удовлетворено всё количество продаж
-            while ($sale->quantity > 0 && $supplyIndex < $supplyCount) {
-                $supply = $supplyItems[$supplyIndex];
+            while ($sale->quantity > 0 && $match !== null && $match < $supplyCount) {
+                $supply = $supplyItems[$match];
                 $quantitySupplied = min($sale->quantity, $supply->quantity);
                 $cost += $quantitySupplied * $supply->price;
                 $sale->quantity -= $quantitySupplied;
@@ -55,9 +70,12 @@ class FifoController extends Controller
 
                 // Если поставка закончилась, то переходим к следующей
                 if ($supply->quantity <= 0) {
-                    $supplyIndex++;
+                    $match++;
                 }
             }
+
+            // Обновляем указатель на последнюю обработанную запись из таблицы supplies
+            $supplyIndex = $match ?? $supplyIndex;
         }
 
         // Вычисляем чистую прибыль

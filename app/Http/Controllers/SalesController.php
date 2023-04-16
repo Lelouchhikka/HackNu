@@ -34,7 +34,7 @@ class SalesController extends Controller
         ]);
         $sale=Sale::create($validatedData);
 
-        return response()->json(['success' => 'success'], 200);
+        return response()->json($sale, 200);
     }
 
     /**
@@ -46,7 +46,6 @@ class SalesController extends Controller
     public function show($id)
     {
         $sale=Sale::findOrFail($id);
-        $sale->makeHidden(['id']);
         return $sale;
     }
 
@@ -63,6 +62,8 @@ class SalesController extends Controller
         $sale = Sale::findOrFail($id);
         $sale->fill($request->except(['id','barcode']));
         $sale->save();
+        $sale->makeHidden(['id']);
+
         return response()->json($sale);
     }
 

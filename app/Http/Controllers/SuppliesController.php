@@ -33,7 +33,7 @@ class SuppliesController extends Controller
             'time'=>'required|date_format:Y-m-d H:i:s'
         ]);
         $sale=Supply::create($validatedData);
-        return response()->json(['success' => 'success'], 200);
+        return response()->json($sale, 200);
     }
 
     /**
@@ -45,7 +45,6 @@ class SuppliesController extends Controller
     public function show($id)
     {
         $supply=Supply::findOrFail($id);
-        $supply->makeHidden(['id']);
         return $supply;
     }
 
@@ -55,13 +54,14 @@ class SuppliesController extends Controller
      *
      * @param  \Illuminate\Http\Request  $request
      * @param  \App\Models\sale  $sales
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function update(Request $request, $id)
     {
         $sale = Supply::findOrFail($id);
         $sale->fill($request->except(['id','barcode']));
         $sale->save();
+        $sale->makeHidden(['id']);
         return response()->json($sale);
     }
 
@@ -74,6 +74,6 @@ class SuppliesController extends Controller
     public function destroy($id)
     {
         $sale = Supply::findOrFail($id);
-        if($sale->delete()) return response(null, 204);
+        if($sale->delete()) return response(null, 200);
     }
 }
